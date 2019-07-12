@@ -504,18 +504,20 @@ class JavaParser:
         if not modifiers and self.accept('this'):
             return tree.ThisParameter(type=typ, annotations=annotations)
         else:
+            variadic = bool(self.accept('...'))
             name = self.parse_name()
             if not modifiers and self.accept('.', 'this'):
                 return tree.ThisParameter(type=typ, annotations=annotations, qualifier=name)
             dimensions = self.parse_dimensions_opt()
-            return tree.FormalParameter(type=typ, name=name, modifiers=modifiers, annotations=annotations, dimensions=dimensions)
+            return tree.FormalParameter(type=typ, name=name, variadic=variadic, modifiers=modifiers, annotations=annotations, dimensions=dimensions)
 
     def parse_parameter(self):
         modifiers, annotations = self.parse_mods_and_annotations(newlines=False)
         typ = self.parse_type(annotations=[])
+        variadic = bool(self.accept('...'))
         name = self.parse_name()
         dimensions = self.parse_dimensions_opt()
-        return tree.FormalParameter(type=typ, name=name, modifiers=modifiers, annotations=annotations, dimensions=dimensions)
+        return tree.FormalParameter(type=typ, name=name, variadic=variadic, modifiers=modifiers, annotations=annotations, dimensions=dimensions)
 
     def parse_class_body(self, parse_member):
         self.require('{')
@@ -1462,8 +1464,12 @@ class JavaParser:
             import ast
             string = ast.literal_eval(self.token.string)
             string = repr(string)
-            string = string[string.index(string[-1])+1:-1]
-            result = tree.Literal('"' + string.replace('"', R'\"').replace(R"\'", "'") + '"')
+            if self.token.string.startswith("'"): # it's a char literal
+                string = string[1:-1]
+                result = tree.Literal("'" + string.replace("'", R"\'").replace(R'\"', '"') + "'")
+            else:                
+                string = string[string.index(string[-1])+1:-1]
+                result = tree.Literal('"' + string.replace('"', R'\"').replace(R"\'", "'") + '"')
             self.next()
 
         elif self.accept('true'):

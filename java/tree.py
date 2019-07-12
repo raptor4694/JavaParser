@@ -1866,15 +1866,22 @@ class Literal(Expression):
                 if len(value) > 1:
                     first = value[1]
                     if first in 'xX':
-                        if 'p' in value or 'P' in value:
+                        if 'p' in value or 'P' in value or '.' in value:
                             return float.fromhex(self._strip_num_value())
                         else:
                             return int(self._strip_num_value(), base=16)
                     elif first in 'bB':
                         return int(self._strip_num_value(), base=2)
-                if value[-1] in 'fFdD':
+                if value[-1] in 'fFdD' or '.' in value:
                     return float(self._strip_num_value())
                 return int(self._strip_num_value())
+            elif self.ischar:
+                from ast import literal_eval
+                parsed = literal_eval(value)
+                try:
+                    return ord(parsed[0])
+                except Exception as e:
+                    raise RuntimeError(f"parsed = {parsed!r}") from e
             elif self.isstring:
                 from ast import literal_eval
                 return literal_eval(value)
@@ -1902,7 +1909,11 @@ class Literal(Expression):
 
     @property
     def isstring(self):
-        return self._str_value[0] in ('"', "'") or self._str_value[0] in "rR" and self._str_value[1] in ('"', "'")
+        return self._str_value[-1] == '"'
+
+    @property
+    def ischar(self):
+        return self._str_value[0] == "'"
 
     @property
     def isnumber(self):
@@ -2925,4 +2936,5 @@ class NodeModifier(NodeVisitor):
         return True, node
 
 if __name__ == "__main__":
+    assert str(Literal("' '")) == "' '"
     print("Complete")

@@ -205,22 +205,16 @@ StringPrefix = group(*all_string_prefixes)
 Single = r"[^'\\]*(?:\\.[^'\\]*)*'"
 # Tail end of " string.
 Double = r'[^"\\]*(?:\\.[^"\\]*)*"'
-# Tail end of ''' string.
-Single3 = r"[^'\\]*(?:(?:\\.|'(?!''))[^'\\]*)*'''"
 # Tail end of """ string.
 Double3 = r'[^"\\]*(?:(?:\\.|"(?!""))[^"\\]*)*"""'
-# Tail end of f' string.
-FSingle = r"[^'\\%]*(?:(?:\\.|%(?:%|n(?![\w$])))[^'\\]*)*(?:%\{?|')"
 # Tail end of f" string.
 FDouble = r'[^"\\%]*(?:(?:\\.|%(?:%|n(?![\w$])))[^"\\]*)*(?:%\{?|")'
-# Tail end of f''' string.
-FSingle3 = r"[^'\\%]*(?:(?:\\.|'(?!'')|%(?:%|n(?![\w$])))[^'\\]*)*(?:%\{?|''')"
 # Tail end of f""" string.
 FDouble3 = r'[^"\\%]*(?:(?:\\.|"(?!"")|%(?:%|n(?![\w$])))[^"\\]*)*(?:%\{?|""")'
 
-Triple = group(StringPrefix + "'''", StringPrefix + '"""')
+Triple = StringPrefix + '"""'
 # Single-line ' or " string.
-String = group(StringPrefix + r"'[^\n'\\]*(?:\\.[^\n'\\]*)*'",
+String = group(r"'[^\n'\\]*(?:\\.[^\n'\\]*)*'",
                StringPrefix + r'"[^\n"\\]*(?:\\.[^\n"\\]*)*"')
 MultiLineCommentEnd = r'(?:[^*]|\*(?!/))*(?:\*/)'
 LambdaNewline = r'\s*' + group(
@@ -251,51 +245,39 @@ Token = Ignore + PlainToken
 # First (or only) line of ' or " string.
 NormalStringPrefix = group("", *combinations('r', 'b'))
 FStringPrefix = group(*combinations('r', 'f') - {'r', 'R'})
-ContStr = group(FStringPrefix + r"'[^\n'\\%]*(?:(?:\\.|%(?:%|n(?![\w$])))[^\n'\\%]*)*" +
-                group("%", "'", r'\\\r?\n'),
-                FStringPrefix + r'"[^\n"\\%]*(?:(?:\\.|%(?:%|n(?![\w$])))[^\n"\\%]*)*' +
+ContStr = group(FStringPrefix + r'"[^\n"\\%]*(?:(?:\\.|%(?:%|n(?![\w$])))[^\n"\\%]*)*' +
                 group("%", '"', r'\\\r?\n'),
-                NormalStringPrefix + r"'[^\n'\\]*(?:\\.[^\n'\\]*)*" +
+                r"'[^\n'\\]*(?:\\.[^\n'\\]*)*" +
                 group("'", r'\\\r?\n'),
                 NormalStringPrefix + r'"[^\n"\\]*(?:\\.[^\n"\\]*)*' +
                 group('"', r'\\\r?\n'))
 PseudoExtras = group(r'\\\r?\n|\Z', Comment, Triple)
 PseudoToken = Whitespace + group(PseudoExtras, Number, Funny, ContStr, Name)
 FunnyNoBracket = group(Operator, r'[][(){]', Special)
-FStringSingleCont = r"\}" + FSingle[:-1] + r"|\\\r?\n)"
-FStringSinglePseudoToken = Whitespace + group(PseudoExtras, Number, FStringSingleCont, FunnyNoBracket, ContStr, Name)
 FStringDoubleCont = r'\}' + FDouble[:-1] + r"|\\\r?\n)"
 FStringDoublePseudoToken = Whitespace + group(PseudoExtras, Number, FStringDoubleCont, FunnyNoBracket, ContStr, Name)
-FStringSingle3Cont = r"\}" + FSingle3
-FStringSingle3PseudoToken = Whitespace + group(PseudoExtras, Number, FStringSingle3Cont, FunnyNoBracket, ContStr, Name)
 FStringDouble3Cont = r'\}' + FDouble3
 FStringDouble3PseudoToken = Whitespace + group(PseudoExtras, Number, FStringDouble3Cont, FunnyNoBracket, ContStr, Name)
 
 # For a given string prefix plus quotes, endpats maps it to a regex
 #  to match the remainder of that string. _prefix can be empty, for
 #  a normal single or triple quoted string (with no prefix).
-endpats = {}
+endpats = {"'": Single}
 for _prefix in all_string_prefixes:
     if 'f' in _prefix or 'F' in _prefix:
-        endpats[_prefix + "'"] = FSingle
         endpats[_prefix + '"'] = FDouble
-        endpats[_prefix + "'''"] = FSingle3
         endpats[_prefix + '"""'] = FDouble3
     else:
-        endpats[_prefix + "'"] = Single
         endpats[_prefix + '"'] = Double
-        endpats[_prefix + "'''"] = Single3
         endpats[_prefix + '"""'] = Double3
 
 # A set of all of the single and triple quoted string prefixes,
 #  including the opening quotes.
-single_quoted = set()
+single_quoted = {"'"}
 triple_quoted = set()
 for t in all_string_prefixes:
-    for u in (t + '"', t + "'"):
-        single_quoted.add(u)
-    for u in (t + '"""', t + "'''"):
-        triple_quoted.add(u)
+    single_quoted.add(t + '"')
+    triple_quoted.add(t + '"""')
 
 #endregion regexes
 
@@ -306,16 +288,12 @@ class Scope(Enum):
     PAREN   = '('
     SQBRACK = '['
     CBRACK  = '{'
-    FSTRING_SINGLE = "f'"
     FSTRING_DOUBLE = 'f"'
-    FSTRING_SINGLE3 = "f'''"
     FSTRING_DOUBLE3 = 'f"""'
-    FSTRING_SINGLE_BRACK = "f'{"
     FSTRING_DOUBLE_BRACK = 'f"{'
-    FSTRING_SINGLE3_BRACK = "f'''{"
     FSTRING_DOUBLE3_BRACK = 'f"""{'
 
-Scope.FSTRINGS = (Scope.FSTRING_SINGLE, Scope.FSTRING_DOUBLE, Scope.FSTRING_SINGLE3, Scope.FSTRING_DOUBLE3, Scope.FSTRING_SINGLE_BRACK, Scope.FSTRING_DOUBLE_BRACK, Scope.FSTRING_SINGLE3_BRACK, Scope.FSTRING_DOUBLE3_BRACK)
+Scope.FSTRINGS = (Scope.FSTRING_DOUBLE, Scope.FSTRING_DOUBLE3, Scope.FSTRING_DOUBLE_BRACK, Scope.FSTRING_DOUBLE3_BRACK)
 
 def tokenize(readline):
     """
@@ -353,21 +331,11 @@ def _tokenize(readline, encoding):
                 return Scope.FSTRING_DOUBLE3_BRACK if brackets else Scope.FSTRING_DOUBLE3
             else:
                 return Scope.FSTRING_DOUBLE_BRACK if brackets else Scope.FSTRING_DOUBLE
-        elif token[1] == "'":
-            if token[1:4] == "'''":
-                return Scope.FSTRING_SINGLE3_BRACK if brackets else Scope.FSTRING_SINGLE3
-            else:
-                return Scope.FSTRING_SINGLE_BRACK if brackets else Scope.FSTRING_SINGLE
         elif token[2] == '"':
             if token[2:5] == '"""':
                 return Scope.FSTRING_DOUBLE3_BRACK if brackets else Scope.FSTRING_DOUBLE3
             else:
                 return Scope.FSTRING_DOUBLE_BRACK if brackets else Scope.FSTRING_DOUBLE
-        elif token[2] == "'":
-            if token[2:5] == "'''":
-                return Scope.FSTRING_SINGLE3_BRACK if brackets else Scope.FSTRING_SINGLE3
-            else:
-                return Scope.FSTRING_SINGLE_BRACK if brackets else Scope.FSTRING_SINGLE
         else:
             assert False
 
@@ -386,11 +354,7 @@ def _tokenize(readline, encoding):
             return STRING
 
     def choose_pseudotoken_based_on_scope():
-        if scope[-1] is Scope.FSTRING_SINGLE_BRACK:
-            return FStringSinglePseudoToken
-        elif scope[-1] is Scope.FSTRING_SINGLE3_BRACK:
-            return FStringSingle3PseudoToken
-        elif scope[-1] is Scope.FSTRING_DOUBLE_BRACK:
+        if scope[-1] is Scope.FSTRING_DOUBLE_BRACK:
             return FStringDoublePseudoToken
         elif scope[-1] is Scope.FSTRING_DOUBLE3_BRACK:
             return FStringDouble3PseudoToken
