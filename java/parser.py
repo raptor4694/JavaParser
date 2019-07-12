@@ -137,7 +137,9 @@ class JavaParser:
             doc = None
             imports = self.parse_import_section()
         else:
-            imports = []
+            if self.would_accept(('from', 'import')):
+                raise JavaSyntaxError("expected 'class', 'interface', '@interface', or 'enum' here", got=self.token, at=self.position())
+            imports = self.parse_import_section()
 
         # re-parse modifiers and annotations if the were used up
         if not modifiers and not annotations:

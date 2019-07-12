@@ -382,7 +382,7 @@ class NodeList(list):
     def reverse(self):
         self._list.reverse()
 
-
+@functools.total_ordering
 class Name(Node):
     REGEX = re.compile(r"^[a-zA-Z_$][a-zA-Z_0-9$]*(?:\.[a-zA-Z_$][a-zA-Z_0-9$]*)*$")
 
@@ -485,6 +485,12 @@ class Name(Node):
 
     def __eq__(self, other):
         return isinstance(other, Name) and str(self) == str(other) or str(self) == other
+
+    def __lt__(self, other):
+        if isinstance(other, (str, Name)):
+            return str(self) < str(other)
+        else:
+            return NotImplemented
 
     @property
     def isdotted(self):
