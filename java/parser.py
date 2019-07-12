@@ -193,15 +193,11 @@ class JavaParser:
 
     def parse_import_section(self) -> List[tree.Import]:
         imports = []
-        while True:
-            if self.would_accept('import'):
-                imports.extend(self.parse_import_declarations())
-            elif self.would_accept('from'):
-                imports.extend(self.parse_from_import_declarations())
-            else:
-                return imports
+        while self.would_accept('import'):
+            imports.extend(self.parse_import_declarations())    
+        return imports
 
-    def parse_import_declarations(self):
+    def parse_import_declarations(self) -> List[tree.Import]:
         self.require('import')
         static = bool(self.accept('static'))
         name, wildcard = self.parse_import_name()
