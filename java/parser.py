@@ -133,19 +133,11 @@ class JavaParser:
         else:
             package = None
 
-        imports = []
-
         if not modifiers and not annotations:
             doc = None
-            while True:
-                if self.would_accept('import'):
-                    imports.extend(self.parse_import_declarations())
-                elif self.would_accept('from'):
-                    imports.extend(self.parse_from_import_declarations())
-                else:
-                    break
-            # while self.would_accept('import'):
-            #     imports.extend(self.parse_import_declarations())
+            imports = self.parse_import_section()
+        else:
+            imports = []
 
         # re-parse modifiers and annotations if the were used up
         if not modifiers and not annotations:
@@ -199,6 +191,16 @@ class JavaParser:
 
         return tree.Package(name=name, doc=doc, annotations=annotations)
 
+    def parse_import_section(self) -> List[tree.Import]:
+        imports = []
+        while True:
+            if self.would_accept('import'):
+                imports.extend(self.parse_import_declarations())
+            elif self.would_accept('from'):
+                imports.extend(self.parse_from_import_declarations())
+            else:
+                return imports
+
     def parse_import_declarations(self):
         self.require('import')
         static = bool(self.accept('static'))
@@ -210,32 +212,6 @@ class JavaParser:
         name = self.parse_qual_name()
         wildcard = bool(self.accept('.', '*'))
         return name, wildcard
-
-    def parse_from_import_declarations(self):
-        self.require('from')
-        base = self.parse_qual_name()
-        self.require('import')
-        static = bool(self.accept('static'))
-        imports = []
-
-        name, wildcard = self.parse_from_import_name(base)
-        imports.append(tree.Import(name=name, static=static, wildcard=wildcard))
-
-        while self.accept(','):
-            name, wildcard = self.parse_from_import_name(base)
-            imports.append(tree.Import(name=name, static=static, wildcard=wildcard))
-
-        self.require(';')
-
-        return imports
-
-    def parse_from_import_name(self, base_name):
-        if self.accept('*'):
-            return base_name, True
-        else:
-            base_name += self.parse_qual_name()
-            wildcard = bool(self.accept('.', '*'))
-            return base_name, wildcard
 
     def parse_directive(self):
         doc = self.doc
