@@ -1441,12 +1441,14 @@ class JavaParser:
         self.require('(')
         args = []
         if not self.would_accept(')'):
-            args.append(self.parse_expr())
+            args.append(self.parse_arg())
             while self.accept(','):
-                args.append(self.parse_expr())
+                args.append(self.parse_arg())
         self.require(')')
 
         return args
+
+    def parse_arg(self): return self.parse_expr()
 
     def parse_primary(self):
         if self.would_accept(NUMBER):
