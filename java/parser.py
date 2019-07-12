@@ -152,10 +152,7 @@ class JavaParser:
             return self.parse_module_declaration(imports, annotations, doc)
 
         if self.token.type != ENDMARKER or modifiers or annotations:
-            types = [self.parse_type_declaration(doc, modifiers, annotations)]
-            while self.token.type != ENDMARKER:
-                if not self.accept(';'):
-                    types.append(self.parse_type_declaration())
+            types = self.parse_type_declarations(doc, modifiers, annotations)
         else:
             types = []
 
@@ -278,6 +275,13 @@ class JavaParser:
                 provides.append(self.parse_qual_name())
         self.require(';')
         return tree.ProvidesDirective(name=name, provides=provides, doc=doc)
+
+    def parse_type_declarations(self, doc=None, modifiers=None, annotations=None) -> List[tree.TypeDeclaration]:
+        types = [self.parse_type_declaration(doc, modifiers, annotations)]
+        while self.token.type != ENDMARKER:
+            if not self.accept(';'):
+                types.append(self.parse_type_declaration())
+        return types
 
     def parse_type_declaration(self, doc=None, modifiers=None, annotations=None):
         if doc is None:
