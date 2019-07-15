@@ -1466,12 +1466,19 @@ class JavaParser:
             import ast
             string = ast.literal_eval(self.token.string)
             string = repr(string)
-            if self.token.string.startswith("'"): # it's a char literal
-                string = string[1:-1]
-                result = tree.Literal("'" + string.replace("'", R"\'").replace(R'\"', '"') + "'")
-            else:                
-                string = string[string.index(string[-1])+1:-1]
-                result = tree.Literal('"' + string.replace('"', R'\"').replace(R"\'", "'") + '"')
+            # if self.token.string.startswith("'"): # it's a char literal
+            #     string = string[1:-1]
+            #     result = tree.Literal("'" + string.replace("'", R"\'").replace(R'\"', '"') + "'")
+            # else:                
+            string = string[string.index(string[-1])+1:-1]
+            result = tree.Literal('"' + string.replace('"', R'\"').replace(R"\'", "'") + '"')
+            self.next()
+
+        elif self.would_accept(CHAR):
+            import ast
+            char = ast.literal_eval(self.token.string)
+            char = repr(char)[1:-1]
+            result = tree.Literal("'" + char.replace("'", R"\'").replace(R'\"', '"') + "'")
             self.next()
 
         elif self.accept('true'):

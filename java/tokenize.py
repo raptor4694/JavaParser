@@ -39,6 +39,8 @@ DOUBLEPLUS = add_custom_token('DOUBLEPLUS', '++')
 DOUBLEMINUS = add_custom_token('DOUBLEMINUS', '--')
 DOUBLEAMPER = add_custom_token('DOUBLEAMPER', '&&')
 DOUBLEVBAR = add_custom_token('DOUBLEVBAR', '||')
+CHAR = add_custom_token('CHAR')
+REGEX = add_custom_token('REGEX')
 FSTRING_BEGIN = add_custom_token('FSTRING_BEGIN')
 FSTRING_MIDDLE = add_custom_token('FSTRING_MIDDLE')
 FSTRING_END = add_custom_token('FSTRING_END')
@@ -167,6 +169,8 @@ Hexfloat = r'0[xX]' + group(r'[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*\.(?:[0-9a-fA-F]+(?
 Floatnumber = group(Hexfloat, Pointfloat, Expfloat) + maybe(FloatSuffix)
 Number = group(Floatnumber, Intnumber)
 
+Regex = r'(?<![])}\w$"\'])\s*(/(?:[^/\\]|\\.)[^/\\]*(?:\\.[^/\\]*)*/)'
+
 # Return the empty string, plus all of the valid string prefixes.
 def combinations(*options: str) -> set:
     def combine(options: set) -> set:
@@ -239,7 +243,7 @@ Bracket = r'[][(){}]'
 Special = group(r'\r?\n', r'\.\.\.', r'[:;.,@]')
 Funny = group(Operator, Bracket, Special)
 
-PlainToken = group(Number, Funny, String, Name)
+PlainToken = group(Number, Regex, Funny, String, Name)
 Token = Ignore + PlainToken
 
 # First (or only) line of ' or " string.
@@ -279,6 +283,7 @@ for t in all_string_prefixes:
     single_quoted.add(t + '"')
     triple_quoted.add(t + '"""')
 
+del combinations
 #endregion regexes
 
 tabsize = 8
@@ -350,6 +355,9 @@ def _tokenize(readline, encoding):
                 return FSTRING_MIDDLE
             else:
                 return FSTRING_BEGIN
+        elif token[0] == "'":
+            assert token[-1] == "'"
+            return CHAR
         else:
             return STRING
 
@@ -463,6 +471,18 @@ def _tokenize(readline, encoding):
             continued = 0
 
         while pos < maxpos:
+            if scope[-1] not in (Scope.FSTRING_DOUBLE_BRACK, Scope.FSTRING_DOUBLE3_BRACK):
+                pseudomatch = re.compile(Regex, re.UNICODE).match(line, pos)
+                if pseudomatch:
+                    start, end = pseudomatch.span(1)
+                    spos, epos, pos = (lnum, start), (lnum, end), end
+                    if start == end:
+                        continue
+                    token, initial = line[start:end], line[start]
+
+                    last = TokenInfo(REGEX, token, spos, epos, line)
+                    yield last
+                    continue
             pseudomatch = re.compile(choose_pseudotoken_based_on_scope(), re.UNICODE).match(line, pos)
             if pseudomatch:                                # scan for tokens
                 start, end = pseudomatch.span(1)
@@ -539,7 +559,7 @@ def _tokenize(readline, encoding):
                         contline = line
                         break
                     else:                                  # ordinary string
-                        last = TokenInfo(STRING, token, spos, epos, line)
+                        last = TokenInfo(get_str_token_type(token), token, spos, epos, line)
                         yield last
 
                 elif initial.isidentifier() or initial == '$':               # ordinary name
