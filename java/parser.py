@@ -763,16 +763,20 @@ class JavaParser:
             condition = self.parse_expr()
             self.require(';')
 
-        update = []
-
-        if not self.would_accept(')'):            
-            update.append(self.parse_expr())
-            while self.accept(','):
-                update.append(self.parse_expr())
+        if self.would_accept(')'):
+            update = []
+        else:
+            update = self.parse_expr_list(end=')')
 
         self.require(')')
 
         return tree.ForControl(init=init, condition=condition, update=update)
+
+    def parse_expr_list(self, end):
+        update = [self.parse_expr()]
+        while self.accept(','):
+            update.append(self.parse_expr())
+        return update
 
     def parse_enhanced_for_control(self):
         var = self.parse_enhanced_for_var()
@@ -876,9 +880,7 @@ class JavaParser:
             labels = None
         else:
             self.require('case')
-            labels = [self.parse_case_label()]
-            while self.accept(','):
-                labels.append(self.parse_case_label())
+            labels = self.parse_case_labels()
         if self.accept('->'):
             if self.would_accept('throw'):
                 stmts = [self.parse_throw()]
@@ -893,6 +895,12 @@ class JavaParser:
             while not self.would_accept(('case', 'default', '}', ENDMARKER)):
                 stmts.append(self.parse_block_statement())
             return tree.SwitchCase(labels=labels, stmts=stmts, arrow=False)
+
+    def parse_case_labels(self):
+        labels = [self.parse_case_label()]
+        while self.accept(','):
+            labels.append(self.parse_case_label())
+        return labels
 
     def parse_case_label(self):
         if self.would_accept(NAME, ('->', ':')) or self.would_accept('(', NAME, ')', ('->', ':')):
@@ -1463,21 +1471,20 @@ class JavaParser:
             result = tree.Literal(self.token.string)
             self.next()
         elif self.would_accept(STRING):
-            import ast
+            import ast, re
             string = ast.literal_eval(self.token.string)
-            string = repr(string)
-            # if self.token.string.startswith("'"): # it's a char literal
-            #     string = string[1:-1]
-            #     result = tree.Literal("'" + string.replace("'", R"\'").replace(R'\"', '"') + "'")
-            # else:                
+            assert isinstance(string, str)
+            string = repr(string)           
             string = string[string.index(string[-1])+1:-1]
+            string = re.sub(r"((?:\\\\)*)\\x([a-fA-F0-9]{2})", R'\1\\u00\2', string)
             result = tree.Literal('"' + string.replace('"', R'\"').replace(R"\'", "'") + '"')
             self.next()
 
         elif self.would_accept(CHAR):
-            import ast
+            import ast, re
             char = ast.literal_eval(self.token.string)
             char = repr(char)[1:-1]
+            char = re.sub(r"((?:\\\\)*)\\x([a-fA-F0-9]{2})", R'\1\\u00\2', char)
             result = tree.Literal("'" + char.replace("'", R"\'").replace(R'\"', '"') + "'")
             self.next()
 
