@@ -167,7 +167,7 @@ class JavaParser:
         doc = self.doc
         modifiers, annotations = self.parse_mods_and_annotations(newlines=True)
         
-        if not modifiers and self.would_accept('package'):
+        if not modifiers and self.would_accept('package', NAME):
             package = self.parse_package_declaration(doc, annotations)
             doc = self.doc
             modifiers, annotations = self.parse_mods_and_annotations(newlines=True)
@@ -693,7 +693,7 @@ class JavaParser:
                 result = self.parse_yield()
             elif self.would_accept('throw'):
                 result = self.parse_throw()
-            elif self.would_accept('result ='):
+            elif self.would_accept('return'):
                 result = self.parse_return()
             elif self.would_accept('switch'):
                 result = self.parse_switch()

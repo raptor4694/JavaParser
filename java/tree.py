@@ -6,6 +6,7 @@ except ImportError:
     from util import *
 from textwrap import indent, dedent
 from typeguard import check_type, check_argument_types
+from enum import Enum
 import re
 import functools
 
@@ -1040,17 +1041,44 @@ class EnumDeclaration(TypeDeclaration):
         return result
 
 class Modifier(Node):
-    VALUES = {'public', 'private', 'protected', 'static', 'native', 'final', 'abstract', 'synchronized', 'strictfp', 'transient', 'volatile', 'default'}
+    VALUES = {'public', 'private', 'protected', 'package', 'static', 'native', 'final', 'abstract', 'synchronized', 'strictfp', 'transient', 'volatile', 'default'}
+    VISIBILITY = {'public', 'private', 'protected', 'package'}
 
     def __init__(self, value: str, parent=None):
         assert check_argument_types()
         # check_type('value', value, str)
-        if value not in Modifier.VALUES:
+        if (value[4:] if value.startswith('non-') and value[4:] not in Modifier.VISIBILITY else value) not in Modifier.VALUES:
             raise ValueError(f'not a modifier: {value!r}')
 
         super().__init__(parent)
 
         self.__value: str = value
+
+    @staticmethod
+    def merge(mods: List['Modifier'], parent_mods: List['Modifier']) -> List['Modifier']:
+        add_index = 0
+        for parent_mod in parent_mods:
+            if parent_mod not in mods:
+                if parent_mod in Modifier.VISIBILITY:
+                    for mod in mods:
+                        if mod in Modifier.VISIBILITY:
+                            break
+                    else:
+                        mods.insert(add_index, parent_mod)
+                        add_index += 1
+                else:
+                    if str(parent_mod).startswith('non-'):
+                        if str(parent_mod)[4:] not in mods:
+                            mods.insert(add_index, parent_mod)
+                            add_index += 1
+                    else:
+                        if 'non-' + str(parent_mod) not in mods:
+                            mods.insert(add_index, parent_mod)
+                            add_index += 1
+        for i in reversed(range(len(mods))):
+            mod = mods[i]
+            if mod == 'package' or str(mod).startswith('non-'):
+                del mods[i]
 
     def accept(self, visitor, value):
         return visitor.visit_modifier(self, value)
@@ -1548,6 +1576,15 @@ class Annotation(AnnotationValue):
 
         self.type: GenericType = type
         self.args: Union[AnnotationValue, List[AnnotationArgument]] = args
+
+    @staticmethod
+    def merge(annos: List['Annotation'], parent_annos: List['Annotation']) -> List['Annotation']:
+        for parent_anno in parent_annos:
+            for anno in annos:
+                if anno.type == parent_anno.type:
+                    break
+            else:
+                annos.append(parent_anno)
 
     def accept(self, visitor, value):
         return visitor.visit_annotation(self, value)
