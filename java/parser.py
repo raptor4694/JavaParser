@@ -11,8 +11,49 @@ class JavaParser:
         self.tokens = LookAheadListIterator(filter(lambda token: token.type not in (NEWLINE, INDENT, DEDENT), tokens))
         self._scope = [False]
         self.filename = filename
+        self._pre_stmts: list = None
         assert self.token.type == ENCODING
         self.next() # skip past the encoding token
+
+        class PreStmtManager:
+            def __init__(self):
+                self.stack = []
+
+            def get_stmts(self) -> List[tree.Statement]:
+                if self.stack:
+                    return self.stack[-1]
+                else:
+                    return None
+
+            def append(self, stmt: tree.Statement):
+                self.get_stmts().append(stmt)
+
+            def apply(self, stmt: tree.Statement):
+                stmts = self.get_stmts()
+                if len(stmts) == 0:
+                    return stmt
+                elif isinstance(stmt, tree.Block):
+                    add = 0
+                    for stmt2 in stmts:
+                        stmt.stmts.insert(add, stmt2)
+                        add += 1
+                    return stmt
+                else:
+                    return tree.Block([*stmts, stmt])
+
+            def __bool__(self):
+                return bool(self.get_stmts())
+
+            def __iter__(self):
+                return iter(self.get_stmts())
+
+            def __enter__(self):
+                self.stack.append([])
+
+            def __exit__(self, exc_typ, exc_val, exc_tb):
+                self.stack.pop()
+
+        self.pre_stmts = PreStmtManager()
 
     @property
     def token(self) -> TokenInfo:
@@ -631,42 +672,44 @@ class JavaParser:
 
     #region Statements
     def parse_statement(self):
-        if self.would_accept('{'):
-            return self.parse_block()
-        elif self.would_accept('if'):
-            return self.parse_if()
-        elif self.would_accept('for'):
-            return self.parse_for()
-        elif self.would_accept('while'):
-            return self.parse_while()
-        elif self.would_accept('do'):
-            return self.parse_do()
-        elif self.would_accept('try'):
-            return self.parse_try()
-        elif self.would_accept('break'):
-            return self.parse_break()
-        elif self.would_accept('continue'):
-            return self.parse_continue()
-        elif self.would_accept('yield'):
-            return self.parse_yield()
-        elif self.would_accept('throw'):
-            return self.parse_throw()
-        elif self.would_accept('return'):
-            return self.parse_return()
-        elif self.would_accept('switch'):
-            return self.parse_switch()
-        elif self.would_accept('synchronized'):
-            return self.parse_synchronized()
-        elif self.would_accept('assert'):
-            return self.parse_assert()
-        elif self.would_accept(';'):
-            return self.parse_empty_statement()
-        elif self.would_accept('else'):
-            raise JavaSyntaxError("'else' without 'if'", at=self.position())
-        elif self.would_accept(('case', 'default')):
-            raise JavaSyntaxError(f"'{self.token.string}' outside 'switch'", at=self.position())
-        else:
-            return self.parse_expr_statement()
+        with self.pre_stmts:
+            if self.would_accept('{'):
+                result = self.parse_block()
+            elif self.would_accept('if'):
+                result = self.parse_if()
+            elif self.would_accept('for'):
+                result = self.parse_for()
+            elif self.would_accept('while'):
+                result = self.parse_while()
+            elif self.would_accept('do'):
+                result = self.parse_do()
+            elif self.would_accept('try'):
+                result = self.parse_try()
+            elif self.would_accept('break'):
+                result = self.parse_break()
+            elif self.would_accept('continue'):
+                result = self.parse_continue()
+            elif self.would_accept('yield'):
+                result = self.parse_yield()
+            elif self.would_accept('throw'):
+                result = self.parse_throw()
+            elif self.would_accept('result ='):
+                result = self.parse_return()
+            elif self.would_accept('switch'):
+                result = self.parse_switch()
+            elif self.would_accept('synchronized'):
+                result = self.parse_synchronized()
+            elif self.would_accept('assert'):
+                result = self.parse_assert()
+            elif self.would_accept(';'):
+                result = self.parse_empty_statement()
+            elif self.would_accept('else'):
+                raise JavaSyntaxError("'else' without 'if'", at=self.position())
+            elif self.would_accept(('case', 'default')):
+                raise JavaSyntaxError(f"'{self.token.string}' outside 'switch'", at=self.position())
+            else:
+                result = self.parse_expr_statement()
+            return self.pre_stmts.apply(result)
 
     def parse_empty_statement(self):
         self.require(';')
@@ -684,17 +727,20 @@ class JavaParser:
             return tree.LabeledStatement(label=label, stmt=self.parse_statement())
 
         if self.would_accept('final') or self.would_accept('@') and not self.would_accept('@', 'interface'):
-            return self.parse_class_or_variable_decl()
+            with self.pre_stmts:
+                return self.pre_stmts.apply(self.parse_class_or_variable_decl())
         if self.would_accept(('class', 'abstract')):
-            return self.parse_class_declaration()
+            with self.pre_stmts:
+                return self.pre_stmts.apply(self.parse_class_declaration())
 
         if self.would_accept((NAME, tree.PrimitiveType.VALUES)):
             try:
-                with self.tokens:
-                    return self.parse_variable_decl()
+                with self.tokens, self.pre_stmts:
+                    return self.pre_stmts.apply(self.parse_variable_decl())
             except JavaSyntaxError as e1:
                 try:
-                    return self.parse_statement()
+                    with self.pre_stmts:
+                        return self.pre_stmts.apply(self.parse_statement())
                 except JavaSyntaxError as e2:
                     raise e2 from e1
 
@@ -1539,9 +1585,8 @@ class JavaParser:
             self.require('.', 'class')
             result = tree.TypeLiteral(type=typ)
 
-        elif self.accept('('):
-            result = tree.Parenthesis(self.parse_expr())
-            self.require(')')
+        elif self.would_accept('('):
+            result = self.parse_parens()
 
         elif self.would_accept('['):
             result = self.parse_list_literal()
@@ -1586,6 +1631,12 @@ class JavaParser:
             else:
                 raise JavaSyntaxError("illegal start of expression", token=self.token, at=self.position())
 
+        return result
+    
+    def parse_parens(self):
+        self.require('(')
+        result = tree.Parenthesis(self.parse_expr())
+        self.require(')')
         return result
 
     def parse_primary_this(self):
