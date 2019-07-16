@@ -494,9 +494,17 @@ class JavaParser:
         if self.would_accept(')'):
             params = []
         else:
-            params = [self.parse_parameter_opt_this() if allow_this else self.parse_parameter()]
-            while self.accept(','):
-                params.append(self.parse_parameter())
+            if allow_this:
+                param = self.parse_parameter_opt_this()
+            else:
+                param = self.parse_parameter()
+            params = [param]
+            if not param.variadic:
+                while self.accept(','):
+                    param = self.parse_parameter()
+                    params.append(param)
+                    if param.variadic:
+                        break
         self.require(')')
         return params
 
@@ -508,7 +516,7 @@ class JavaParser:
         else:
             variadic = bool(self.accept('...'))
             name = self.parse_name()
-            if not modifiers and self.accept('.', 'this'):
+            if not variadic and not modifiers and self.accept('.', 'this'):
                 return tree.ThisParameter(type=typ, annotations=annotations, qualifier=name)
             dimensions = self.parse_dimensions_opt()
             return tree.FormalParameter(type=typ, name=name, variadic=variadic, modifiers=modifiers, annotations=annotations, dimensions=dimensions)
@@ -526,7 +534,7 @@ class JavaParser:
         members = []
         while not self.would_accept(('}', ENDMARKER)):
             if not self.accept(';'):
-                members.append(parse_member())
+                members.extend(parse_member())
         self.require('}')
 
         return members
@@ -544,7 +552,7 @@ class JavaParser:
         if self.accept(';'):
             while not self.would_accept(('}', ENDMARKER)):
                 if not self.accept(';'):
-                    members.append(self.parse_class_member())
+                    members.extend(self.parse_class_member())
             
         self.require('}')
 
@@ -555,24 +563,32 @@ class JavaParser:
         if self.would_accept('static', '{'):
             self.next() # skip past the 'static' token
             body = self.parse_block()
-            return tree.InitializerBlock(body=body, static=True, doc=doc)
+            return [tree.InitializerBlock(body=body, static=True, doc=doc)]
         elif self.would_accept('{'):
             body = self.parse_block()
-            return tree.InitializerBlock(body=body, static=False, doc=doc)
+            return [tree.InitializerBlock(body=body, static=False, doc=doc)]
         else:
             modifiers, annotations = self.parse_mods_and_annotations()
             if self.would_accept(('class', 'interface', '@', 'enum')):
-                return self.parse_type_declaration(doc, modifiers, annotations)
+                return [self.parse_type_declaration(doc, modifiers, annotations)]
             else:
-                return self.parse_method_or_field_declaration(doc, modifiers, annotations)
+                result = self.parse_method_or_field_declaration(doc, modifiers, annotations)
+                if isinstance(result, (list, tuple)):
+                    return result
+                else:
+                    return [result]
 
     def parse_interface_member(self):
         doc = self.doc
         modifiers, annotations = self.parse_mods_and_annotations(newlines=True)
         if self.would_accept(('class', 'interface', '@', 'enum')):
-            return self.parse_type_declaration(doc, modifiers, annotations)
+            return [self.parse_type_declaration(doc, modifiers, annotations)]
         else:
-            return self.parse_method_or_field_declaration(doc, modifiers, annotations, interface=True)
+            result = self.parse_method_or_field_declaration(doc, modifiers, annotations, interface=True)
+            if isinstance(result, (list, tuple)):
+                return result
+            else:
+                return [result]
 
     def parse_enum_field(self, doc=None, annotations=None):
         if doc is None:
@@ -596,16 +612,20 @@ class JavaParser:
         if self.would_accept('static', '{'):
             self.next() # skips past the 'static' token
             body = self.parse_block()
-            return tree.InitializerBlock(body=body, static=True, doc=doc)
+            return [tree.InitializerBlock(body=body, static=True, doc=doc)]
         elif self.would_accept('{'):
             body = self.parse_block()
-            return tree.InitializerBlock(body=body, static=False, doc=doc)
+            return [tree.InitializerBlock(body=body, static=False, doc=doc)]
         else:
             modifiers, annotations = self.parse_mods_and_annotations()
             if self.would_accept(('class', 'interface', '@', 'enum')):
-                return self.parse_type_declaration(doc, modifiers, annotations)
+                return [self.parse_type_declaration(doc, modifiers, annotations)]
             else:
-                return self.parse_annotation_method_or_field_declaration(doc, modifiers, annotations)
+                result = self.parse_annotation_method_or_field_declaration(doc, modifiers, annotations)
+                if isinstance(result, (list, tuple)):
+                    return result
+                else:
+                    return [result]
 
     #endregion Declarations
 

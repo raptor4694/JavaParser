@@ -1247,7 +1247,7 @@ class AnnotationProperty(Named, Declaration, Member, Dimension, Node):
         return result
 
 class FormalParameter(Named, Declaration, Dimension, Node):
-    def __init__(self, *, name, type: 'Type', variadic: bool=False, dimensions=[], annotations=[], modifiers=[], parent=None):
+    def __init__(self, *, name, type: 'Type', variadic: bool=False, default: Optional['Expression']=None, dimensions=[], annotations=[], modifiers=[], parent=None):
         assert check_argument_types()
         # check_type('type', type, Type)
         # check_type('variadic', variadic, bool)
@@ -1259,6 +1259,7 @@ class FormalParameter(Named, Declaration, Dimension, Node):
 
         self.type: Type = type
         self.variadic: bool = variadic
+        self.default: Expression = default
 
     def accept(self, visitor, value):
         return visitor.visit_formal_parameter(self, value)
@@ -1277,6 +1278,12 @@ class ThisParameter(Annotated, Node):
 
         self.type: Type = type
         self.qualifier: Name = qualifier
+    
+    @property
+    def variadic(self): return False
+
+    @property
+    def default(self): return None
 
     def accept(self, visitor, value):
         return visitor.visit_this_parameter(self, value)
@@ -1899,6 +1906,9 @@ class Literal(Expression):
                 raise ValueError(f'{value!r} is not a valid literal')
 
         self._value = parse_value()
+
+    def copy(self, parent=None):
+        return Literal(self._str_value, parent=parent)
 
     @property
     def value(self):
