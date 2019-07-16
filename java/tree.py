@@ -1064,16 +1064,16 @@ class Modifier(Node):
                         if mod in Modifier.VISIBILITY:
                             break
                     else:
-                        mods.insert(add_index, parent_mod)
+                        mods.insert(add_index, parent_mod.copy())
                         add_index += 1
                 else:
                     if str(parent_mod).startswith('non-'):
                         if str(parent_mod)[4:] not in mods:
-                            mods.insert(add_index, parent_mod)
+                            mods.insert(add_index, parent_mod.copy())
                             add_index += 1
                     else:
                         if 'non-' + str(parent_mod) not in mods:
-                            mods.insert(add_index, parent_mod)
+                            mods.insert(add_index, parent_mod.copy())
                             add_index += 1
         for i in reversed(range(len(mods))):
             mod = mods[i]
@@ -1579,12 +1579,14 @@ class Annotation(AnnotationValue):
 
     @staticmethod
     def merge(annos: List['Annotation'], parent_annos: List['Annotation']) -> List['Annotation']:
+        add_index = 0
         for parent_anno in parent_annos:
             for anno in annos:
                 if anno.type == parent_anno.type:
                     break
             else:
-                annos.append(parent_anno)
+                annos.insert(add_index, parent_anno.copy())
+                add_index += 1
 
     def accept(self, visitor, value):
         return visitor.visit_annotation(self, value)

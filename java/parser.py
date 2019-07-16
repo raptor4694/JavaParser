@@ -349,11 +349,14 @@ class JavaParser:
         while True:
             if self.would_accept('@') and not self.would_accept('@', 'interface'):
                 annotations.append(self.parse_annotation())
+            elif self.would_accept('package'):
+                break
             elif self.would_accept(tree.Modifier.VALUES):
                 modifiers.append(tree.Modifier(self.token.string))
                 self.next()
             else:
-                return modifiers, annotations
+                break
+        return modifiers, annotations
    
     def parse_class_declaration(self, doc=None, modifiers=None, annotations=None):
         if doc is None:
